@@ -35,13 +35,79 @@ write_status() {
   echo "{\"step\":\"${step}\",\"status\":\"${status}\",\"message\":\"${message}\",\"container\":\"${CONTAINER_NAME}\",\"repo\":\"${REPO}\",\"issue\":${ISSUE_NUMBER},\"issue_url\":\"${ISSUE_URL}\",\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"${extra}}" > "$STATUS_FILE"
 }
 
+# --- Notifications (OpenClaw CLI — no token needed, uses running gateway) ---
+DISCORD_CHANNEL_ID="${DISCORD_CHANNEL_ID:?Set DISCORD_CHANNEL_ID env var}"
+OPENCLAW_BIN="${OPENCLAW_BIN:-/opt/homebrew/bin/openclaw}"
+
+notify() {
+  local msg="$1"
+  echo "==> [notify] Sending: ${msg:0:80}..."
+  "$OPENCLAW_BIN" message send \
+    --channel discord \
+    --target "$DISCORD_CHANNEL_ID" \
+    --message "$msg" 2>&1 || echo "==> [notify] FAILED: $?"
+  echo "==> [notify] Done."
+}
+
+# --- Live Log Viewer ---
+LOG_FILE="/tmp/${CONTAINER_NAME}.log"
+LOG_PORT=$((19000 + ISSUE_NUMBER))
+LOG_VIEWER_PID=""
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "localhost")
+LOG_URL="http://${LOCAL_IP}:${LOG_PORT}"
+
+start_log_viewer() {
+  local viewer_script="/tmp/${CONTAINER_NAME}-viewer.py"
+  cat > "$viewer_script" << 'PYEOF'
+import http.server, sys, html, os
+
+LOG_FILE = sys.argv[1]
+CONTAINER = os.environ.get("CONTAINER_NAME", "pipeline")
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        try:
+            content = open(LOG_FILE).read()
+        except FileNotFoundError:
+            content = "Waiting for output..."
+        escaped = html.escape(content)
+        page = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="3">
+<title>{CONTAINER}</title>
+<style>
+body {{ background:#0d1117; color:#c9d1d9; font-family:'SF Mono','Menlo',monospace; font-size:13px; padding:20px; margin:0; }}
+pre {{ white-space:pre-wrap; word-wrap:break-word; }}
+.hdr {{ color:#58a6ff; border-bottom:1px solid #30363d; padding-bottom:10px; margin-bottom:10px; }}
+</style></head>
+<body><div class="hdr">{CONTAINER} — auto-refresh 3s</div>
+<pre>{escaped}</pre>
+<script>window.scrollTo(0,document.body.scrollHeight);</script>
+</body></html>"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(page.encode())
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(("0.0.0.0", int(sys.argv[2])), Handler).serve_forever()
+PYEOF
+  CONTAINER_NAME="$CONTAINER_NAME" python3 "$viewer_script" "$LOG_FILE" "$LOG_PORT" &
+  LOG_VIEWER_PID=$!
+}
+
+stop_log_viewer() {
+  [ -n "$LOG_VIEWER_PID" ] && kill "$LOG_VIEWER_PID" 2>/dev/null || true
+  rm -f "/tmp/${CONTAINER_NAME}-viewer.py"
+}
+
 write_status "init" "running" "Pipeline starting"
+notify "🔧 Pipeline starting for **${REPO}** Issue #${ISSUE_NUMBER}"
 
 # Resolve API keys from env, OpenClaw agent config, or gh auth
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   ANTHROPIC_API_KEY=$(python3 -c "
 import json
-with open('<your-config>/auth-profiles.json') as f:
+with open('$HOME/.openclaw/agents/main/agent/auth-profiles.json') as f:
     d = json.load(f)
 print(d['profiles']['anthropic:default']['key'])
 " 2>/dev/null || true)
@@ -76,6 +142,9 @@ ISSUE_LABELS=$(echo "$ISSUE_JSON" | jq -r '[.labels[].name] | join(",")')
 
 echo "==> Issue: #${ISSUE_NUMBER} - ${ISSUE_TITLE}"
 echo "==> Labels: ${ISSUE_LABELS}"
+notify "📋 Issue #${ISSUE_NUMBER}: **${ISSUE_TITLE}**
+Label: \`${ISSUE_LABELS}\`
+${ISSUE_URL}"
 
 write_status "clone" "running" "Preparing workspace for ${REPO}"
 
@@ -106,9 +175,11 @@ chmod -R 777 "$WORKDIR"
 # Cleanup on exit (trap handles: normal exit, error, SIGINT, SIGTERM)
 cleanup() {
   echo "==> Cleaning up..."
+  stop_log_viewer
   docker kill "$CONTAINER_NAME" 2>/dev/null || true
   docker rm "$CONTAINER_NAME" 2>/dev/null || true
   rm -rf "$WORKDIR"
+  rm -f "$LOG_FILE"
   echo "==> Cleanup done."
 }
 trap cleanup EXIT
@@ -207,8 +278,19 @@ ${TEAM_PROMPT}
 
 write_status "container" "running" "Agent Teams working" "label" "$ISSUE_LABELS"
 
+# Start live log viewer
+> "$LOG_FILE"
+start_log_viewer
+notify "⚙️ Agent Teams working on Issue #${ISSUE_NUMBER} — may take 5-15 min
+Container: \`${CONTAINER_NAME}\`
+Live logs: ${LOG_URL}"
+
 echo "==> Starting container ${CONTAINER_NAME} (Agent Teams mode)..."
-docker run --rm \
+echo "==> Live logs: ${LOG_URL}"
+
+# Run docker in background, monitor with timeout
+set +e
+docker run --rm -t \
   --name "$CONTAINER_NAME" \
   -v "${WORKDIR}:/workspace" \
   -w /workspace \
@@ -221,26 +303,57 @@ docker run --rm \
   claude-worker \
   -p "$PROMPT" \
   --dangerously-skip-permissions \
-  --output-format text
+  --output-format text 2>&1 | tee "$LOG_FILE" &
+DOCKER_PID=$!
 
-EXIT_CODE=$?
+# Monitor: wait for docker to finish, or detect PR created and force stop
+MAX_WAIT=1800  # 30 min hard limit
+POLL_INTERVAL=30
+ELAPSED=0
+while kill -0 "$DOCKER_PID" 2>/dev/null; do
+  sleep "$POLL_INTERVAL"
+  ELAPSED=$((ELAPSED + POLL_INTERVAL))
 
-if [ $EXIT_CODE -eq 0 ]; then
-  # Try to find the PR that was just created
-  PR_JSON=$(gh pr list --repo "$REPO" --head "$BRANCH" --json number,url,title,additions,deletions --jq '.[0] // empty' 2>/dev/null || true)
-  if [ -n "$PR_JSON" ]; then
-    PR_URL=$(echo "$PR_JSON" | jq -r '.url')
-    PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
-    PR_ADDITIONS=$(echo "$PR_JSON" | jq -r '.additions')
-    PR_DELETIONS=$(echo "$PR_JSON" | jq -r '.deletions')
-    write_status "done" "success" "PR #${PR_NUMBER} created" "pr_url" "$PR_URL" "pr_number" "$PR_NUMBER" "additions" "$PR_ADDITIONS" "deletions" "$PR_DELETIONS"
-  else
-    write_status "done" "success" "Container finished. Check repo for PR."
+  # Check if PR was already created (work is done, container just hasn't exited)
+  if gh pr list --repo "$REPO" --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null | grep -q .; then
+    echo "==> PR detected! Stopping container (work complete, container hung)..."
+    docker stop "$CONTAINER_NAME" --time 10 2>/dev/null || true
+    break
   fi
-  echo "==> Done. Check ${REPO} for new PR."
+
+  # Hard timeout
+  if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+    echo "==> Timeout (${MAX_WAIT}s). Stopping container..."
+    docker stop "$CONTAINER_NAME" --time 10 2>/dev/null || true
+    break
+  fi
+done
+
+wait "$DOCKER_PID" 2>/dev/null
+EXIT_CODE=$?
+echo "==> Container exited with code ${EXIT_CODE}"
+
+# Check for PR (the real success indicator — exit code is unreliable due to force-stop)
+PR_JSON=$(gh pr list --repo "$REPO" --head "$BRANCH" --json number,url,title,additions,deletions --jq '.[0] // empty' 2>/dev/null || echo "")
+PR_URL=$(echo "$PR_JSON" | jq -r '.url // empty' 2>/dev/null || echo "")
+PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number // empty' 2>/dev/null || echo "")
+
+if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+  PR_ADDITIONS=$(echo "$PR_JSON" | jq -r '.additions // 0' 2>/dev/null || echo "0")
+  PR_DELETIONS=$(echo "$PR_JSON" | jq -r '.deletions // 0' 2>/dev/null || echo "0")
+  write_status "done" "success" "PR #${PR_NUMBER} created" "pr_url" "$PR_URL" "pr_number" "$PR_NUMBER" "additions" "$PR_ADDITIONS" "deletions" "$PR_DELETIONS"
+  notify "✅ PR #${PR_NUMBER} ready for Issue #${ISSUE_NUMBER}!
+${PR_URL}
+\`+${PR_ADDITIONS} -${PR_DELETIONS}\`
+Review and say **merge** when ready."
+  EXIT_CODE=0
 else
-  write_status "done" "failed" "Container exited with code ${EXIT_CODE}" "exit_code" "$EXIT_CODE"
-  echo "==> claude-worker exited with code ${EXIT_CODE}"
+  write_status "done" "failed" "No PR found (exit code ${EXIT_CODE})" "exit_code" "$EXIT_CODE"
+  notify "❌ Issue #${ISSUE_NUMBER} failed — no PR created.
+${ISSUE_URL}
+Say **retry** or **cancel**."
 fi
 
+# Stop log viewer before exiting (cleanup trap also handles this, belt-and-suspenders)
+stop_log_viewer
 exit $EXIT_CODE

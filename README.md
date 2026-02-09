@@ -6,125 +6,111 @@ Automated development pipeline that turns feature requests into pull requests us
 Feature request -> GitHub Issue -> Claude Code Agent Teams (Docker) -> PR
 ```
 
-## How It Works
-
-1. **Orchestrator** (OpenClaw or any LLM assistant) receives a feature request via chat
-2. **Scope analysis** determines label and team composition
-3. **GitHub Issue** is created with a structured body and acceptance criteria
-4. **implement-issue.sh** launches a Docker container running Claude Code with Agent Teams
-5. Inside the container, a **Team Leader** spawns specialized teammates (builder, tester, etc.)
-6. Teammates implement the feature, write tests, and iterate until all tests pass
-7. A **PR** is created automatically. User reviews and merges.
-
 ## Architecture
 
 ```
-Orchestrator (LLM)
+Orchestrator (LLM assistant)
   |
+  |-- Creates GitHub Issue with label + acceptance criteria
   |-- exec: implement-issue.sh <owner/repo> <issue_number>
   |
   v
 implement-issue.sh (host)
-  |-- Fetches issue from GitHub
+  |-- Fetches issue metadata from GitHub
   |-- Prepares workspace (cached local clone)
-  |-- Launches Docker container
+  |-- Starts live log viewer (HTTP)
+  |-- Sends Discord notification: "Pipeline starting"
+  |-- Launches Docker container in background
+  |-- Polls for PR every 30s (stops container when PR detected)
+  |-- Sends Discord notification: success or failure
   |
   v
 Docker: claude-worker
-  |
   |-- Claude Code (Team Leader)
-  |     |-- TeamCreate -> teammates
-  |     |-- SendMessage -> coordination
-  |     |-- Testing Gate -> all tests must pass
-  |     |-- gh pr create
+  |     |-- Reads codebase, creates branch
+  |     |-- TeamCreate -> spawns teammates by label
+  |     |-- Teammates implement + tester writes tests (parallel)
+  |     |-- Testing gate: all tests must pass before PR
+  |     |-- git push + gh pr create
   |     |-- TeamDelete
   |
   v
 PR created -> User reviews -> Merge
 ```
 
-## File Structure
-
-```
-pipeline/
-  implement-issue.sh      # Cached clone + Docker run + status reporting
-  Dockerfile              # claude-worker image (Ubuntu + Node + gh + Claude Code)
-
-skills/auto-implement/    # Orchestrator skill files (for OpenClaw or similar)
-  SKILL.md                # Main flow: 5-step pipeline
-  labels.md               # Scope analysis: size check + label selection
-  repos.md                # Known repos and tech stacks
-  issue-template.md       # Issue body strategy + template routing
-  multi-issue.md          # Large features: root issue + sub-issue orchestration
-  reporting.md            # 5 checkpoints + polling + retry flow
-  cleanup.md              # Merge + container kill + cancel + status
-  errors.md               # 7 error scenarios
-  templates/
-    frontend.md           # Frontend issue body template
-    backend.md            # Backend issue body template
-    fullstack.md          # Fullstack issue body template + API contract
-    bugfix.md             # Bugfix issue body template + reproduction steps
-    generic.md            # Generic issue body template
-    sub-issue.md          # Multi-issue phase template + scope boundary
-```
-
 ## Prerequisites
 
-- **Docker** with `claude-worker` image built
-- **GitHub CLI** (`gh`) authenticated
-- **Anthropic API key** set as `ANTHROPIC_API_KEY` env var
-- **Claude Code** (`@anthropic-ai/claude-code`) npm package
+- **Docker**
+- **GitHub CLI** (`gh`) — authenticated via `gh auth login`
+- **Node.js** (for Claude Code CLI)
+- **Python 3** (for live log viewer)
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key. Auto-resolved from `~/.openclaw/agents/main/agent/auth-profiles.json` if not set. |
+| `GITHUB_TOKEN` | No | GitHub token. Auto-resolved from `gh auth token` if not set. |
+| `DISCORD_CHANNEL_ID` | Yes | Discord channel ID for pipeline notifications. |
+| `OPENCLAW_BIN` | No | Path to OpenClaw CLI binary. Default: `/opt/homebrew/bin/openclaw` |
 
 ## Setup
 
-### 1. Build the Docker image
+### 1. Clone this repo
+
+```bash
+git clone https://github.com/caesar-is-great/code-build-pipeline.git
+cd code-build-pipeline
+```
+
+### 2. Build the Docker image
 
 ```bash
 docker build -t claude-worker ./pipeline/
 ```
 
-### 2. Set environment variables
-
+Verify:
 ```bash
-export ANTHROPIC_API_KEY="your-api-key"
-export GITHUB_TOKEN=$(gh auth token)
+docker run --rm claude-worker --version
 ```
 
-The script auto-resolves `GITHUB_TOKEN` from `gh auth token` if not set.
+### 3. Set environment variables
 
-### 3. Run manually (without orchestrator)
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export DISCORD_CHANNEL_ID="your-discord-channel-id"
+```
+
+### 4. Run
 
 ```bash
 # Create a GitHub issue first, then:
 ./pipeline/implement-issue.sh <owner/repo> <issue_number>
 ```
 
-### 4. Use with an orchestrator (OpenClaw)
+## Notifications
 
-Copy the `skills/auto-implement/` directory to your orchestrator's skill directory. Update the `implement-issue.sh` path in SKILL.md, multi-issue.md, and reporting.md to match your local setup.
+The script sends Discord messages at each stage via the OpenClaw CLI (`openclaw message send`). No bot token needed in the script environment — it uses the running OpenClaw gateway.
 
-You'll also need:
-- **exec-approvals** for `gh`, `docker`, and `implement-issue.sh`
-- **TOOLS.md** with pipeline paths for your environment
-- **Execution rule**: The skill is designed to run autonomously. Once invoked, the orchestrator should execute each step immediately without asking the user for confirmation. Issue creation flows directly into implementation, and independent issues run in parallel automatically.
-- **Skill routing** in your agent's `AGENTS.md` (or equivalent config) so the orchestrator knows when to invoke the skill:
+| Stage | Message |
+|-------|---------|
+| Start | Pipeline starting for **repo** Issue #N |
+| Issue fetched | Issue #N: **title**, label |
+| Container running | Agent Teams working — live logs URL |
+| Success | PR #N ready! `+additions -deletions`. Review and say **merge**. |
+| Failure | Issue #N failed — no PR created. Say **retry** or **cancel**. |
 
-```markdown
-### Skill Routing (IMPORTANT)
+## Live Log Viewer
 
-When someone asks you to **build a feature, fix a bug, or make code changes**,
-use the `auto-implement` skill. Do NOT try to implement manually or spawn
-sub-agents. The auto-implement skill handles everything: issue creation,
-Docker containers, Agent Teams, testing, and PR creation.
+Each run starts a local HTTP server that streams Docker output with 3-second auto-refresh:
 
-Flow: Read the skill's SKILL.md → follow the steps → use exec to run implement-issue.sh.
-
-IMPORTANT: Execute each pipeline step immediately without asking for confirmation.
-The user already approved by requesting the feature/fix. Do not pause between
-issue creation and implementation — proceed automatically.
+```
+http://<local-ip>:<port>
 ```
 
-Without explicit routing, the orchestrator may fall back to manual implementation instead of using the pipeline.
+Port = `19000 + issue_number` (e.g., issue #42 -> port 19042).
+
+The URL is included in the Discord notification.
 
 ## Labels and Team Composition
 
@@ -132,31 +118,11 @@ Without explicit routing, the orchestrator may fall back to manual implementatio
 |-------|------|----------|
 | `auto-implement:frontend` | ui-builder + tester | UI changes, screens, components |
 | `auto-implement:backend` | api-builder + db-engineer + tester | API, DB, server logic |
-| `auto-implement:fullstack` | fe-builder + be-builder + tester | Small features spanning both layers |
-| `auto-implement:bugfix` | investigator x2 + tester | Bug fixes with regression testing |
-| `auto-implement` | auto-composed + tester | Unclear scope, let AI decide |
+| `auto-implement:fullstack` | fe-builder + be-builder + tester | Both layers |
+| `auto-implement:bugfix` | investigator x2 + tester | Bug fixes with regression tests |
+| `auto-implement` | auto-composed + tester | Unclear scope, AI decides |
 
-Every team **always includes a mandatory tester** who:
-1. Reads the issue's Acceptance Criteria
-2. Writes a test plan
-3. Writes and runs tests (unit, integration, E2E)
-4. Reports pass/fail to the team leader
-
-## Testing Gate
-
-PR creation is blocked until **all tests pass**:
-
-```
-Implementers build code
-  |
-  v
-Tester runs full test suite
-  |
-  |- FAIL -> Tester reports to implementer -> Fix -> Re-run
-  |           (repeat until all pass)
-  |
-  |- PASS -> PR created
-```
+Every team always includes a **mandatory tester** who reads acceptance criteria, writes tests, runs the full suite, and blocks PR creation until all tests pass.
 
 ## Multi-Issue (Large Features)
 
@@ -169,39 +135,79 @@ Root Issue #10: "Add payment system"
   |-- Sub-issue #13: Phase 3 - E2E tests
 ```
 
-- Sub-issues are created **in parallel**
-- Sub-issues are executed **sequentially** (Phase 1 must merge before Phase 2 starts)
-- Phase transitions run merge + cleanup + next phase start **in parallel**
+Sub-issues are created in parallel, executed sequentially.
 
-## Cached Local Clone
-
-The pipeline caches repositories to avoid re-cloning:
+## File Structure
 
 ```
-~/.pipeline/
-  repos/<owner>-<repo>/           # Base repo (cloned once, fetched per run)
-  worktrees/<owner>-<repo>-<N>/   # Per-issue workspace (local clone, hardlinks)
+code-build-pipeline/
+  pipeline/
+    implement-issue.sh        # Main script: clone, docker, poll, notify
+    Dockerfile                # claude-worker image (Ubuntu + Node 22 + gh + Claude Code)
+  skills/auto-implement/      # Orchestrator skill files
+    SKILL.md                  # 5-step pipeline flow
+    labels.md                 # Scope analysis + label selection
+    repos.md                  # Known repos and tech stacks
+    issue-template.md         # Issue body strategy + template routing
+    multi-issue.md            # Large feature orchestration
+    reporting.md              # 5 notification checkpoints + polling
+    cleanup.md                # Merge + cancel + status flows
+    errors.md                 # Error scenarios and fixes
+    templates/                # Label-specific issue body templates
+      frontend.md
+      backend.md
+      fullstack.md
+      bugfix.md
+      generic.md
+      sub-issue.md
 ```
 
-- First run: full network clone (~30s)
-- Subsequent runs: `git fetch` + local clone with hardlinks (~2s)
+## Monitoring
 
-## Status Reporting
+```bash
+# List running pipeline containers
+docker ps --filter name=pipeline-
 
-The script writes JSON progress to `/tmp/pipeline-<owner>-<repo>-<issue>.status`:
+# Shell into a running container
+docker exec -it pipeline-owner-repo-7 bash
 
-```json
-{
-  "step": "container",
-  "status": "running",
-  "message": "Agent Teams working",
-  "container": "pipeline-owner-repo-7",
-  "repo": "owner/repo",
-  "issue": 7,
-  "pr_url": "https://github.com/...",
-  "pr_number": 8
-}
+# Inside the container:
+ls /workspace/                       # Working files
+git log --oneline                    # Commits
+tmux list-sessions                   # Agent Teams sessions
+
+# View container logs
+docker logs -f pipeline-owner-repo-7
+
+# Check status file
+cat /tmp/pipeline-owner-repo-7.status
 ```
+
+## Troubleshooting
+
+```bash
+# Force kill a stuck container
+docker kill pipeline-owner-repo-7
+
+# Kill all pipeline containers
+docker ps --filter name=pipeline- -q | xargs docker kill
+
+# Rebuild image after Dockerfile changes
+docker build -t claude-worker ./pipeline/
+
+# Clean up stopped containers
+docker container prune -f
+```
+
+## Using with an Orchestrator
+
+Copy `skills/auto-implement/` to your orchestrator's skill directory. You'll need:
+
+- **exec-approvals** for `gh`, `docker`, and `implement-issue.sh`
+- **Skill routing** so the orchestrator knows to use the pipeline for build/fix requests
+- **Autonomous execution**: the skill runs each step without asking for confirmation
+
+See `skills/auto-implement/SKILL.md` for the full 5-step flow.
 
 ## License
 
