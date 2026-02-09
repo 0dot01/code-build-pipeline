@@ -199,15 +199,137 @@ docker build -t claude-worker ./pipeline/
 docker container prune -f
 ```
 
-## Using with an Orchestrator
+## Orchestrator Setup (OpenClaw)
 
-Copy `skills/auto-implement/` to your orchestrator's skill directory. You'll need:
+This section explains how to wire the pipeline into an OpenClaw instance. Adapt paths for your environment.
 
-- **exec-approvals** for `gh`, `docker`, and `implement-issue.sh`
-- **Skill routing** so the orchestrator knows to use the pipeline for build/fix requests
-- **Autonomous execution**: the skill runs each step without asking for confirmation
+### 1. Clone the repo
 
-See `skills/auto-implement/SKILL.md` for the full 5-step flow.
+```bash
+git clone https://github.com/caesar-is-great/code-build-pipeline.git ~/Projects/claude-pipeline
+```
+
+### 2. Copy skill files
+
+```bash
+cp -r ~/Projects/claude-pipeline/skills/auto-implement \
+  ~/.openclaw/workspace/skills/auto-implement
+```
+
+This gives your orchestrator the 5-step pipeline flow, issue templates, error handling, and cleanup procedures.
+
+### 3. Configure exec-approvals
+
+Add the pipeline script, `gh`, and `docker` to `~/.openclaw/exec-approvals.json` so the orchestrator can run them without manual approval:
+
+```json
+{
+  "defaults": {
+    "security": "allowlist",
+    "ask": "on-miss",
+    "allowlist": [
+      { "pattern": "/opt/homebrew/bin/gh" },
+      { "pattern": "/usr/local/bin/docker" },
+      { "pattern": "~/Projects/claude-pipeline/pipeline/implement-issue.sh" }
+    ]
+  }
+}
+```
+
+Adjust paths to match your system (`which gh`, `which docker`).
+
+### 4. Add pipeline info to TOOLS.md
+
+Add a section to `~/.openclaw/workspace/TOOLS.md` so the orchestrator knows where things are:
+
+```markdown
+### Claude Pipeline (auto-implement)
+
+- Script: `~/Projects/claude-pipeline/pipeline/implement-issue.sh`
+- Docker image: `claude-worker` (build: `docker build -t claude-worker ~/Projects/claude-pipeline/pipeline/`)
+- Container naming: `pipeline-<owner>-<repo>-<issue_number>`
+- Repo cache: `~/.pipeline/repos/<repo>`
+- Workspaces: `~/.pipeline/worktrees/<repo>-<issue>`
+- Status files: `/tmp/pipeline-<owner>-<repo>-<issue>.status`
+- exec-approvals: `gh`, `docker`, `implement-issue.sh` pre-approved
+```
+
+### 5. Add skill routing to AGENTS.md
+
+Add this to `~/.openclaw/workspace/AGENTS.md` so the orchestrator routes build/fix requests to the pipeline instead of trying to implement manually:
+
+```markdown
+### Skill Routing (IMPORTANT)
+
+When someone asks you to **build a feature, fix a bug, or make code changes**,
+use the `auto-implement` skill. Do NOT try to implement manually or spawn
+sub-agents. The auto-implement skill handles everything: issue creation,
+Docker containers, Agent Teams, testing, and PR creation.
+
+Flow: Read the skill's SKILL.md -> follow the steps -> use exec to run implement-issue.sh.
+
+IMPORTANT: Execute each pipeline step immediately without asking for confirmation.
+The user already approved by requesting the feature/fix. Do not pause between
+issue creation and implementation — proceed automatically.
+```
+
+### 6. Add known repos
+
+Edit `~/.openclaw/workspace/skills/auto-implement/repos.md` with your repositories:
+
+```markdown
+## owner/repo
+
+- **Stack**: React Native + Expo
+- **Language**: TypeScript
+- **Build**: Yarn 4
+- **Tests**: Jest
+- **CI**: GitHub Actions
+```
+
+This helps the orchestrator pick the right label and team composition without analyzing the repo from scratch each time.
+
+### 7. Add GitHub labels to your repos
+
+Create these labels on each repo you want to use with the pipeline:
+
+| Label | Color | Description |
+|-------|-------|-------------|
+| `auto-implement` | `#0E8A16` (green) | Default — AI picks team |
+| `auto-implement:frontend` | `#1D76DB` (blue) | UI changes |
+| `auto-implement:backend` | `#D93F0B` (red) | API/DB changes |
+| `auto-implement:fullstack` | `#5319E7` (purple) | Both layers |
+| `auto-implement:bugfix` | `#FBCA04` (yellow) | Bug fixes |
+
+```bash
+# Example: create all labels at once
+REPO="owner/repo"
+gh label create "auto-implement" --color 0E8A16 --repo $REPO
+gh label create "auto-implement:frontend" --color 1D76DB --repo $REPO
+gh label create "auto-implement:backend" --color D93F0B --repo $REPO
+gh label create "auto-implement:fullstack" --color 5319E7 --repo $REPO
+gh label create "auto-implement:bugfix" --color FBCA04 --repo $REPO
+```
+
+### Summary
+
+After setup, your orchestrator workspace should look like:
+
+```
+~/.openclaw/
+  exec-approvals.json           # gh, docker, implement-issue.sh approved
+  workspace/
+    AGENTS.md                   # Skill routing section added
+    TOOLS.md                    # Pipeline paths section added
+    skills/
+      auto-implement/           # Copied from this repo
+        SKILL.md
+        labels.md
+        repos.md                # Your repos added here
+        ...
+```
+
+The orchestrator can now handle requests like "Add dark mode to owner/repo" end-to-end: analyze scope, create issue, run pipeline, notify on completion, merge on approval.
 
 ## License
 
