@@ -42,7 +42,7 @@ When OpenClaw executes these via the exec tool, no manual approval is required.
 }
 ```
 
-### GitHub Repo Labels (caesar-is-great/elyxs)
+### GitHub Repo Labels
 
 | Label | Color | Team Composition |
 |-------|-------|------------------|
@@ -94,7 +94,7 @@ docker run --rm --entrypoint bash claude-worker -c "gh --version && git --versio
 User: "Add version info to settings screen"
          │
          ▼
-implement-issue.sh caesar-is-great/elyxs <issue_number>
+implement-issue.sh owner/repo <issue_number>
          │
          ├─ 1. gh issue view → Fetch issue metadata
          ├─ 2. Select team prompt based on label
@@ -122,16 +122,16 @@ implement-issue.sh caesar-is-great/elyxs <issue_number>
 ```bash
 # Basic usage
 DISCORD_CHANNEL_ID=your-channel-id \
-  ~/Projects/claude-pipeline/implement-issue.sh caesar-is-great/elyxs 5
+  ~/Projects/claude-pipeline/implement-issue.sh owner/repo 5
 
 # With explicit env vars
 ANTHROPIC_API_KEY=sk-ant-... GITHUB_TOKEN=ghp_... DISCORD_CHANNEL_ID=your-channel-id \
-  ~/Projects/claude-pipeline/implement-issue.sh caesar-is-great/elyxs 5
+  ~/Projects/claude-pipeline/implement-issue.sh owner/repo 5
 ```
 
 ### Via OpenClaw (Discord/Telegram)
 
-> "Add dark mode to caesar-is-great/elyxs"
+> "Add dark mode to owner/repo"
 
 OpenClaw's `auto-implement` skill handles issue creation → script execution → PR notification.
 

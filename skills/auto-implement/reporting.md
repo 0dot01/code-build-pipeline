@@ -4,7 +4,7 @@
 
 The pipeline writes progress to `/tmp/pipeline-<owner>-<repo>-<issue_number>.status` (JSON).
 
-Example: `/tmp/pipeline-caesar-is-great-elyxs-7.status`
+Example: `/tmp/pipeline-owner-repo-7.status`
 
 Read this file to get current state. It is overwritten at each milestone (always shows latest).
 
@@ -15,10 +15,10 @@ Read this file to get current state. It is overwritten at each milestone (always
   "step": "container",
   "status": "running",
   "message": "Agent Teams working",
-  "container": "pipeline-caesar-is-great-elyxs-7",
-  "repo": "caesar-is-great/elyxs",
+  "container": "pipeline-owner-repo-7",
+  "repo": "owner/repo",
   "issue": 7,
-  "issue_url": "https://github.com/caesar-is-great/elyxs/issues/7",
+  "issue_url": "https://github.com/owner/repo/issues/7",
   "ts": "2026-02-09T12:00:00Z",
   "label": "auto-implement:frontend"
 }

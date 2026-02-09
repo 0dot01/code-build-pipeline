@@ -1,6 +1,6 @@
 # Known Repos
 
-## caesar-is-great/elyxs
+## owner/repo
 
 - **Stack**: React Native + Expo + AWS Amplify
 - **Language**: TypeScript
