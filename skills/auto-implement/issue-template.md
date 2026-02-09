@@ -9,14 +9,16 @@ OpenClaw must transform a short user request into a rich, actionable issue body.
 2. **Infer specifics** — based on the tech stack, fill in frameworks, file paths, and patterns. Don't ask the user things you can infer.
 3. **Ask only when ambiguous** — if the request is genuinely unclear (e.g., "improve performance" — where?), ask one focused question.
 
-### What to infer (examples for elyxs)
+### What to infer (examples)
 
-| User says | OpenClaw infers |
-|-----------|----------------|
-| "Add settings screen" | Expo Router → `app/(tabs)/settings.tsx`, use existing theme/components |
-| "Add push notifications" | Amplify backend, Expo Notifications API, permission handling |
-| "Fix login crash" | Check `src/screens/auth/`, Amplify Auth, error boundaries |
-| "Add dark mode" | `useColorScheme`, AsyncStorage for persistence, ThemeProvider |
+Use the tech stack from `repos.md` to fill in framework-specific details:
+
+| User says | What to infer from tech stack |
+|-----------|-------------------------------|
+| "Add settings screen" | Router type → file path, existing theme/components |
+| "Add push notifications" | Backend service, notification API, permission handling |
+| "Fix login crash" | Auth module path, error boundaries, auth flow |
+| "Add dark mode" | Theme hook, storage for persistence, ThemeProvider pattern |
 
 ## Pick Template by Label
 

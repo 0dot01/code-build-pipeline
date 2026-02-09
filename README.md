@@ -78,7 +78,7 @@ flowchart TB
 ### 1. Clone this repo
 
 ```bash
-git clone https://github.com/caesar-is-great/code-build-pipeline.git
+git clone <this-repo-url> code-build-pipeline
 cd code-build-pipeline
 ```
 
@@ -277,13 +277,13 @@ This section explains how to wire the pipeline into an OpenClaw instance. Adapt 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/caesar-is-great/code-build-pipeline.git ~/Projects/claude-pipeline
+git clone <this-repo-url> ~/Projects/code-build-pipeline
 ```
 
 ### 2. Copy skill files
 
 ```bash
-cp -r ~/Projects/claude-pipeline/skills/auto-implement \
+cp -r ~/Projects/code-build-pipeline/skills/auto-implement \
   ~/.openclaw/workspace/skills/auto-implement
 ```
 
@@ -301,7 +301,7 @@ Add the pipeline script, `gh`, and `docker` to `~/.openclaw/exec-approvals.json`
     "allowlist": [
       { "pattern": "/opt/homebrew/bin/gh" },
       { "pattern": "/usr/local/bin/docker" },
-      { "pattern": "~/Projects/claude-pipeline/pipeline/implement-issue.sh" }
+      { "pattern": "~/Projects/code-build-pipeline/pipeline/implement-issue.sh" }
     ]
   }
 }
@@ -316,8 +316,8 @@ Add a section to `~/.openclaw/workspace/TOOLS.md` so the orchestrator knows wher
 ```markdown
 ### Claude Pipeline (auto-implement)
 
-- Script: `~/Projects/claude-pipeline/pipeline/implement-issue.sh`
-- Docker image: `claude-worker` (build: `docker build -t claude-worker ~/Projects/claude-pipeline/pipeline/`)
+- Script: `~/Projects/code-build-pipeline/pipeline/implement-issue.sh`
+- Docker image: `claude-worker` (build: `docker build -t claude-worker ~/Projects/code-build-pipeline/pipeline/`)
 - Container naming: `pipeline-<owner>-<repo>-<issue_number>`
 - Repo cache: `~/.pipeline/repos/<repo>`
 - Workspaces: `~/.pipeline/worktrees/<repo>-<issue>`
