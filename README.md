@@ -2,40 +2,60 @@
 
 Automated development pipeline that turns feature requests into pull requests using Claude Code Agent Teams in Docker.
 
-```
-Feature request -> GitHub Issue -> Claude Code Agent Teams (Docker) -> PR
+```mermaid
+graph LR
+    A[Feature Request] --> B[GitHub Issue]
+    B --> C[Claude Code Agent Teams]
+    C --> D[Pull Request]
+    D --> E[Review & Merge]
+
+    style A fill:#4a90d9,color:#fff,stroke:none
+    style B fill:#6c5ce7,color:#fff,stroke:none
+    style C fill:#e17055,color:#fff,stroke:none
+    style D fill:#00b894,color:#fff,stroke:none
+    style E fill:#fdcb6e,color:#000,stroke:none
 ```
 
 ## Architecture
 
-```
-Orchestrator (LLM assistant)
-  |
-  |-- Creates GitHub Issue with label + acceptance criteria
-  |-- exec: implement-issue.sh <owner/repo> <issue_number>
-  |
-  v
-implement-issue.sh (host)
-  |-- Fetches issue metadata from GitHub
-  |-- Prepares workspace (cached local clone)
-  |-- Starts live log viewer (HTTP)
-  |-- Sends Discord notification: "Pipeline starting"
-  |-- Launches Docker container in background
-  |-- Polls for PR every 30s (stops container when PR detected)
-  |-- Sends Discord notification: success or failure
-  |
-  v
-Docker: claude-worker
-  |-- Claude Code (Team Leader)
-  |     |-- Reads codebase, creates branch
-  |     |-- TeamCreate -> spawns teammates by label
-  |     |-- Teammates implement + tester writes tests (parallel)
-  |     |-- Testing gate: all tests must pass before PR
-  |     |-- git push + gh pr create
-  |     |-- TeamDelete
-  |
-  v
-PR created -> User reviews -> Merge
+```mermaid
+flowchart TB
+    subgraph Orchestrator["Orchestrator (LLM Assistant)"]
+        A1[Receive feature request] --> A2[Analyze scope & pick label]
+        A2 --> A3["Create GitHub Issue"]
+        A3 --> A4["exec: implement-issue.sh"]
+    end
+
+    subgraph Host["implement-issue.sh (Host)"]
+        B1[Fetch issue metadata] --> B2[Prepare workspace<br/>cached local clone]
+        B2 --> B3[Start live log viewer<br/>HTTP on port 19000+N]
+        B3 --> B4["Send Discord notification"]
+        B4 --> B5["Launch Docker container"]
+        B5 --> B6["Poll for PR every 30s"]
+        B6 -->|PR detected| B7[Stop container]
+        B6 -->|Timeout 30min| B7
+        B7 --> B8["Send completion notification"]
+    end
+
+    subgraph Docker["Docker: claude-worker"]
+        C1["Claude Code (Team Leader)"] --> C2[Read codebase & create branch]
+        C2 --> C3[TeamCreate: spawn teammates]
+        C3 --> C4[Implementers build code]
+        C3 --> C5[Tester writes test specs]
+        C4 --> C6{Testing Gate}
+        C5 --> C6
+        C6 -->|FAIL| C7[Fix & re-run]
+        C7 --> C6
+        C6 -->|ALL PASS| C8["git push + gh pr create"]
+    end
+
+    A4 --> B1
+    B5 --> C1
+    C8 --> B6
+
+    style Orchestrator fill:#f0f4ff,stroke:#4a90d9
+    style Host fill:#fff8f0,stroke:#e17055
+    style Docker fill:#f0fff4,stroke:#00b894
 ```
 
 ## Prerequisites
@@ -92,13 +112,26 @@ export DISCORD_CHANNEL_ID="your-discord-channel-id"
 
 The script sends Discord messages at each stage via the OpenClaw CLI (`openclaw message send`). No bot token needed in the script environment — it uses the running OpenClaw gateway.
 
-| Stage | Message |
-|-------|---------|
-| Start | Pipeline starting for **repo** Issue #N |
-| Issue fetched | Issue #N: **title**, label |
-| Container running | Agent Teams working — live logs URL |
-| Success | PR #N ready! `+additions -deletions`. Review and say **merge**. |
-| Failure | Issue #N failed — no PR created. Say **retry** or **cancel**. |
+```mermaid
+sequenceDiagram
+    participant S as implement-issue.sh
+    participant D as Discord
+    participant U as User
+
+    S->>D: Pipeline starting for repo Issue #N
+    S->>D: Issue #N: title, label
+    S->>D: Agent Teams working — live logs URL
+
+    Note over S: Docker container running...<br/>Polling for PR every 30s
+
+    alt PR created
+        S->>D: PR #N ready! +additions -deletions
+        D->>U: Review and say "merge"
+    else No PR (timeout/error)
+        S->>D: Issue #N failed — no PR created
+        D->>U: Say "retry" or "cancel"
+    end
+```
 
 ## Live Log Viewer
 
@@ -123,6 +156,45 @@ The URL is included in the Discord notification.
 | `auto-implement` | auto-composed + tester | Unclear scope, AI decides |
 
 Every team always includes a **mandatory tester** who reads acceptance criteria, writes tests, runs the full suite, and blocks PR creation until all tests pass.
+
+```mermaid
+graph TB
+    TL["Team Leader"]
+
+    subgraph frontend["frontend"]
+        F1[ui-builder]
+        F2[tester]
+    end
+
+    subgraph backend["backend"]
+        B1[api-builder]
+        B2[db-engineer]
+        B3[tester]
+    end
+
+    subgraph fullstack["fullstack"]
+        S1[fe-builder]
+        S2[be-builder]
+        S3[tester]
+    end
+
+    subgraph bugfix["bugfix"]
+        X1[investigator]
+        X2[investigator]
+        X3[tester]
+    end
+
+    TL -->|":frontend"| frontend
+    TL -->|":backend"| backend
+    TL -->|":fullstack"| fullstack
+    TL -->|":bugfix"| bugfix
+
+    style TL fill:#e17055,color:#fff,stroke:none
+    style frontend fill:#dfe6e9,stroke:#1D76DB
+    style backend fill:#dfe6e9,stroke:#D93F0B
+    style fullstack fill:#dfe6e9,stroke:#5319E7
+    style bugfix fill:#dfe6e9,stroke:#FBCA04
+```
 
 ## Multi-Issue (Large Features)
 
