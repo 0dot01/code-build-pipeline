@@ -383,23 +383,50 @@ gh label create "auto-implement:fullstack" --color 5319E7 --repo $REPO
 gh label create "auto-implement:bugfix" --color FBCA04 --repo $REPO
 ```
 
-### Summary
+### Workspace Overview
 
-After setup, your orchestrator workspace should look like:
+After setup, your full orchestrator workspace should look like:
 
 ```
 ~/.openclaw/
-  exec-approvals.json           # gh, docker, implement-issue.sh approved
+  openclaw.json                   # Daemon config (model, channels, gateway port)
+  exec-approvals.json             # Pre-approved binaries (gh, docker, implement-issue.sh)
+  .env                            # Secrets (API keys, tokens)
   workspace/
-    AGENTS.md                   # Skill routing section added
-    TOOLS.md                    # Pipeline paths section added
+    AGENTS.md                     # Boot sequence + skill routing + behavior rules
+    SOUL.md                       # Orchestrator personality and identity
+    USER.md                       # Info about the user (preferences, context)
+    TOOLS.md                      # Local paths, environment-specific references
+    MEMORY.md                     # Long-term memory (curated, cross-session)
+    IDENTITY.md                   # Public-facing identity details
+    HEARTBEAT.md                  # Periodic task checklist (checked every ~30min)
+    memory/                       # Daily session logs
+      2026-02-09.md
     skills/
-      auto-implement/           # Copied from this repo
-        SKILL.md
-        labels.md
-        repos.md                # Your repos added here
-        ...
+      auto-implement/             # <-- Copied from this repo
+        SKILL.md                  # 5-step pipeline flow
+        labels.md                 # Scope analysis + label selection
+        repos.md                  # Known repos (add yours here)
+        issue-template.md         # Issue body strategy
+        multi-issue.md            # Large feature orchestration
+        reporting.md              # Notification checkpoints
+        cleanup.md                # Merge + cancel flows
+        errors.md                 # Error scenarios
+        templates/                # Issue body templates by label
 ```
+
+**What each file does:**
+
+| File | Role | Pipeline-relevant? |
+|------|------|--------------------|
+| `AGENTS.md` | Boot sequence: what to read on startup, safety rules, skill routing | Yes — skill routing section triggers the pipeline |
+| `SOUL.md` | Personality, tone, identity of the orchestrator | No — but defines how it communicates results |
+| `USER.md` | User preferences, context, working style | No — but helps orchestrator tailor messages |
+| `TOOLS.md` | Local paths, environment details, command references | Yes — pipeline paths and commands |
+| `MEMORY.md` | Persistent memory across sessions | No — orchestrator's long-term memory |
+| `HEARTBEAT.md` | Checklist for periodic heartbeat polls (~30min) | Optional — can add pipeline status checks |
+| `exec-approvals.json` | Allowlist for binaries the orchestrator can run without asking | Yes — must include gh, docker, implement-issue.sh |
+| `openclaw.json` | Daemon config: model, Discord/Telegram channels, gateway port | Yes — defines which channels receive notifications |
 
 The orchestrator can now handle requests like "Add dark mode to owner/repo" end-to-end: analyze scope, create issue, run pipeline, notify on completion, merge on approval.
 
