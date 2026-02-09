@@ -30,18 +30,34 @@ Is this a **large feature** requiring 2+ layers (backend + frontend + tests + de
 | `auto-implement:bugfix` | Bug fixes, crash fixes, error resolution | investigator x2 -> fixer |
 | `auto-implement` | Unclear scope, simple tasks -> let AI decide | auto (2-4 members) |
 
+## Edge Cases — Common Misclassifications
+
+These are frequently misclassified. Pay attention:
+
+| Feature | Looks like... | Actually is... | Why |
+|---------|--------------|----------------|-----|
+| "Add daily notes with AsyncStorage" | `fullstack` | `frontend` | AsyncStorage is client-side only, no backend API needed |
+| "Add local settings/preferences" | `fullstack` | `frontend` | Client-side storage, no server involved |
+| "Add loading spinner to login" | `frontend` | `fullstack` | Spinner needs API response state from backend |
+| "Cache API responses locally" | `backend` | `frontend` | Caching happens on client side (React Query, AsyncStorage) |
+| "Add form validation" | `frontend` | depends | Frontend-only if client validation; fullstack if server validation too |
+
+**Rule of thumb**: If data never leaves the device (AsyncStorage, SecureStore, local state), it's `frontend`. Only use `fullstack` when both a server API change AND a UI change are needed.
+
 ## Examples
 
 ### Single issue
 
 - "Add dark mode" -> `frontend`
 - "Show version in settings" -> `frontend`
+- "Add daily review notes (stored locally)" -> `frontend` (AsyncStorage = client-side)
+- "Add local preferences/settings" -> `frontend`
 - "API responses are slow" -> `backend`
 - "Login is broken" -> `bugfix`
 - "Add README badge" -> `auto-implement`
 - "Change font" -> `frontend`
 - "Password reset email" -> `backend`
-- "Add a loading spinner to login" -> `fullstack` (small, one field)
+- "Add a loading spinner to login" -> `fullstack` (needs API response state)
 
 ### Multi-issue (read `multi-issue.md`)
 
