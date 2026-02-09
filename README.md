@@ -33,7 +33,6 @@ flowchart TB
         B4 --> B5["Launch Docker container"]
         B5 --> B6["Poll for PR every 30s"]
         B6 -->|PR detected| B7[Stop container]
-        B6 -->|Timeout 30min| B7
         B7 --> B8["Send completion notification"]
     end
 
@@ -127,7 +126,7 @@ sequenceDiagram
     alt PR created
         S->>D: PR #N ready! +additions -deletions
         D->>U: Review and say "merge"
-    else No PR (timeout/error)
+    else No PR (error)
         S->>D: Issue #N failed — no PR created
         D->>U: Say "retry" or "cancel"
     end

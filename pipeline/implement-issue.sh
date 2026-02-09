@@ -288,7 +288,7 @@ Live logs: ${LOG_URL}"
 echo "==> Starting container ${CONTAINER_NAME} (Agent Teams mode)..."
 echo "==> Live logs: ${LOG_URL}"
 
-# Run docker in background, monitor with timeout
+# Run docker in background, poll for PR completion
 set +e
 docker run --rm -t \
   --name "$CONTAINER_NAME" \
@@ -307,23 +307,13 @@ docker run --rm -t \
 DOCKER_PID=$!
 
 # Monitor: wait for docker to finish, or detect PR created and force stop
-MAX_WAIT=1800  # 30 min hard limit
 POLL_INTERVAL=30
-ELAPSED=0
 while kill -0 "$DOCKER_PID" 2>/dev/null; do
   sleep "$POLL_INTERVAL"
-  ELAPSED=$((ELAPSED + POLL_INTERVAL))
 
   # Check if PR was already created (work is done, container just hasn't exited)
   if gh pr list --repo "$REPO" --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null | grep -q .; then
     echo "==> PR detected! Stopping container (work complete, container hung)..."
-    docker stop "$CONTAINER_NAME" --time 10 2>/dev/null || true
-    break
-  fi
-
-  # Hard timeout
-  if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
-    echo "==> Timeout (${MAX_WAIT}s). Stopping container..."
     docker stop "$CONTAINER_NAME" --time 10 2>/dev/null || true
     break
   fi
