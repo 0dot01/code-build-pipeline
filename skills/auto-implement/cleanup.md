@@ -4,7 +4,7 @@
 
 Triggered by: "merge", "LGTM", or equivalent.
 
-Run steps 1-3 **in parallel** (they are independent):
+Note: The container is already stopped and cleaned up by `implement-issue.sh` (PR polling + cleanup trap). No docker commands needed here.
 
 ### 1. Merge PR
 
@@ -12,24 +12,9 @@ Run steps 1-3 **in parallel** (they are independent):
 gh pr merge <pr_number> --repo <owner/repo> --rebase --delete-branch
 ```
 
-### 2. Kill the issue's container
+### 2. Report
 
-```bash
-docker kill pipeline-<owner>-<repo>-<issue_number> 2>/dev/null || true
-docker rm pipeline-<owner>-<repo>-<issue_number> 2>/dev/null || true
-```
-
-### 3. Check for orphan containers
-
-```bash
-docker ps --filter name=pipeline- --format "{{.Names}} {{.Status}}"
-```
-
-No output = clean. If output exists, report to user and ask whether to kill.
-
-### 4. Report (after 1-3 all complete)
-
-"Merged! Issue #N closed. Containers cleaned up."
+"Merged! Issue #N closed. Branch deleted."
 
 ---
 
