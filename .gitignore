@@ -1,0 +1,12 @@
+# Runtime
+*.log
+*.status
+*.pid
+*-viewer.py
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.*
