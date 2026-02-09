@@ -106,6 +106,7 @@ Copy the `skills/auto-implement/` directory to your orchestrator's skill directo
 You'll also need:
 - **exec-approvals** for `gh`, `docker`, and `implement-issue.sh`
 - **TOOLS.md** with pipeline paths for your environment
+- **Execution rule**: The skill is designed to run autonomously. Once invoked, the orchestrator should execute each step immediately without asking the user for confirmation. Issue creation flows directly into implementation, and independent issues run in parallel automatically.
 - **Skill routing** in your agent's `AGENTS.md` (or equivalent config) so the orchestrator knows when to invoke the skill:
 
 ```markdown
@@ -117,6 +118,10 @@ sub-agents. The auto-implement skill handles everything: issue creation,
 Docker containers, Agent Teams, testing, and PR creation.
 
 Flow: Read the skill's SKILL.md → follow the steps → use exec to run implement-issue.sh.
+
+IMPORTANT: Execute each pipeline step immediately without asking for confirmation.
+The user already approved by requesting the feature/fix. Do not pause between
+issue creation and implementation — proceed automatically.
 ```
 
 Without explicit routing, the orchestrator may fall back to manual implementation instead of using the pipeline.

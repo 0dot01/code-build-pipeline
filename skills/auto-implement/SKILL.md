@@ -19,6 +19,10 @@ User request -> GitHub Issue -> Claude Code in Docker -> PR -> merge -> cleanup.
 Container naming: `pipeline-<owner>-<repo>-<issue_number>` (for tracking/kill)
 Status file: `/tmp/pipeline-<owner>-<repo>-<issue_number>.status` (JSON progress)
 
+> **RULE: This is an automated pipeline. Execute each step immediately without asking for confirmation.
+> The user already approved by requesting a feature/fix. Do NOT stop to ask "should I run it?" or "parallel or sequential?" — just execute.
+> Only ask the user when: (1) the repo is unknown, or (2) the request is too ambiguous to create an issue.**
+
 ## Flow
 
 ### 1. Analyze Scope
@@ -38,16 +42,20 @@ Read `issue-template.md` for body format. (You already have `repos.md` from Step
 gh issue create --repo <owner/repo> --title "<concise English title>" --body "<details>" --label "<label>"
 ```
 
-Ask user for repo if not specified.
-After creation, send **Checkpoint 1** from `reporting.md`.
+Ask user for repo only if not specified and not in `repos.md`.
+After creation, send **Checkpoint 1** from `reporting.md`. Then immediately proceed to Step 3 — do NOT wait for user response.
 
 ### 3. Run Implementation
+
+**Execute immediately after issue creation. Do NOT ask for confirmation.**
 
 ```bash
 implement-issue.sh <owner/repo> <issue_number>
 ```
 
-- Takes 5-15 min. Use background exec to avoid blocking conversation.
+- Run in background exec. Takes 5-15 min.
+- If multiple independent issues: run ALL of them in parallel (separate background exec per issue). Do NOT ask "parallel or sequential?" — independent issues always run in parallel.
+- If issues depend on each other (multi-issue phases): run sequentially per `multi-issue.md`.
 - Read `reporting.md` for polling strategy and progress updates.
 
 ### 4. Report Result
