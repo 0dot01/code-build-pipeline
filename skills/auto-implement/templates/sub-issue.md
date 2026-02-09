@@ -38,20 +38,19 @@ Part of #10: Add payment system
 Implement payment API endpoints and database schema.
 
 ## Tech Context
-- Framework: AWS Amplify + Lambda
-- Relevant paths: amplify/backend/api/, amplify/backend/function/
-- Existing patterns: Follow existing order model and CRUD resolvers
+- Framework: <from repos.md>
+- Relevant paths: src/api/, src/models/
+- Existing patterns: Follow existing order model and CRUD endpoints
 
 ## Details
 - Add Payment model: id, userId, amount, currency, status, createdAt
 - Add PaymentMethod model: id, userId, type, last4, isDefault
-- GraphQL mutations: createPayment, updatePaymentStatus
-- GraphQL queries: getPayment, listPaymentsByUser
-- Stripe integration via Lambda function (stripe npm package)
+- Endpoints: POST /payments, GET /payments/:id, GET /payments?userId=
+- Stripe integration (stripe npm package)
 - Auth: owner can read own payments, admin can read all
 
 ## Scope Boundary
-- IN scope: API endpoints, DB schema, Stripe Lambda, auth rules
+- IN scope: API endpoints, DB schema, Stripe integration, auth rules
 - OUT of scope: Payment UI screens (Phase 2), E2E tests (Phase 3)
 
 ## Depends On
@@ -59,8 +58,8 @@ None (first phase)
 
 ## Acceptance Criteria
 - [ ] Payment and PaymentMethod models in schema
-- [ ] CRUD resolvers working via GraphQL
-- [ ] Stripe charge creation via Lambda
+- [ ] CRUD endpoints working
+- [ ] Stripe charge creation working
 - [ ] Auth rules enforced (owner-only reads)
 ```
 
@@ -74,16 +73,16 @@ Part of #10: Add payment system
 Build payment UI screens consuming the API from Phase 1.
 
 ## Tech Context
-- Framework: React Native + Expo
-- Relevant paths: app/(tabs)/payments/, src/components/payment/
-- Existing patterns: Follow existing order list screen layout
+- Framework: <from repos.md>
+- Relevant paths: src/pages/payments/, src/components/payment/
+- Existing patterns: Follow existing order list page layout
 
 ## Details
-- Payment history screen: list user's payments (listPaymentsByUser query)
-- Add payment method screen: card input form (Stripe Elements or manual)
-- Checkout flow: select method → confirm amount → createPayment mutation
+- Payment history page: list user's payments (GET /payments?userId=)
+- Add payment method page: card input form
+- Checkout flow: select method → confirm amount → POST /payments
 - Loading states, error handling, empty states
-- Navigation: add "Payments" tab in bottom nav via Expo Router
+- Navigation: add "Payments" link in main nav
 
 ## Scope Boundary
 - IN scope: All payment UI screens, navigation, state management

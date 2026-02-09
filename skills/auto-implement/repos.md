@@ -1,12 +1,18 @@
 # Known Repos
 
+Add repos here as they are used with the pipeline. The orchestrator reads this file to infer tech stack details when generating issue bodies.
+
+## Format
+
+```markdown
 ## owner/repo
 
-- **Stack**: React Native + Expo + AWS Amplify
-- **Language**: TypeScript
-- **Structure**: Expo Router (file-based routing), Amplify AI integration
-- **Default label hint**: mostly `frontend` or `fullstack`
-- **Build**: Yarn 4, EAS Build
-- **Tests**: Jest
-- **CI**: GitHub Actions (deploy.yml, e2e.yml)
-- **Context files**: `CLAUDE.md` (project context), `.claude/` (settings)
+- **Stack**: (e.g., React Native + Expo, Next.js, Django + React)
+- **Language**: (e.g., TypeScript, Python, Go)
+- **Structure**: (e.g., file-based routing, monorepo, microservices)
+- **Default label hint**: (e.g., mostly `frontend`, `backend`, `fullstack`)
+- **Build**: (e.g., Yarn 4, npm, Poetry)
+- **Tests**: (e.g., Jest, pytest, Go test)
+- **CI**: (e.g., GitHub Actions)
+- **Context files**: (e.g., `CLAUDE.md`, `.claude/`)
+```

@@ -5,7 +5,7 @@
 <1-2 sentences: what to build>
 
 ## Tech Context
-- Framework: <from repos.md, e.g., AWS Amplify>
+- Framework: <from repos.md>
 - Relevant paths: <API dirs, schema files, config>
 - Existing patterns: <similar existing endpoints/models to follow>
 
@@ -28,15 +28,15 @@
 Add password reset API endpoint.
 
 ## Tech Context
-- Framework: AWS Amplify + Lambda
-- Relevant paths: amplify/backend/function/, amplify/backend/api/
-- Existing patterns: Follow existing auth flow in authFunction/
+- Framework: <from repos.md>
+- Relevant paths: src/api/, src/models/
+- Existing patterns: Follow existing auth flow
 
 ## Details
 - POST /auth/reset-password: { email } → { success, message }
 - POST /auth/confirm-reset: { email, code, newPassword } → { success }
 - Rate limit: max 3 requests per email per hour
-- Send reset code via SES (existing email service)
+- Send reset code via email service
 - Code expires after 15 minutes
 
 ## Acceptance Criteria

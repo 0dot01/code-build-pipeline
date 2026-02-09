@@ -351,9 +351,9 @@ Edit `~/.openclaw/workspace/skills/auto-implement/repos.md` with your repositori
 ```markdown
 ## owner/repo
 
-- **Stack**: React Native + Expo
+- **Stack**: (e.g., React + Next.js, Django, Rails)
 - **Language**: TypeScript
-- **Build**: Yarn 4
+- **Build**: npm
 - **Tests**: Jest
 - **CI**: GitHub Actions
 ```
